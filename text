@@ -1,0 +1,45 @@
+#关闭防火墙
+systemctl stop firewalld;systemctl disable firewalld;iptables -F;iptables -X;iptables -Z;iptables-save
+
+#关闭SELINUX
+setenforce 0;sed -i 's/SELINUX=enforcing/SELINUX=disabled/g' /etc/selinux/config
+
+#配置路由转发
+cat >> /etc/sysctl.conf <<EOF
+net.ipv4.ip_forward = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
+EOF
+modprobe br_netfilter
+sysctl -p
+
+#配置YUM仓库
+rm -rf /etc/yum.repos.d/*
+curl -o /etc/yum.repos.d/CentOS-Base.repo https://mirrors.aliyun.com/repo/Centos-7.repo
+curl -o /etc/yum.repos.d/docker-ce.repo https://mirrors.aliyun.com/docker-ce/linux/centos/docker-ce.repo
+yum clean all;yum makecache;yum repolist;sleep 5
+
+#安装docker
+yum install -y yum-utils device-mapper-persistent-data lvm2  unzip docker-ce-19.03.11 docker-ce-cli-19.03.11
+
+#配置加速源
+cat >/etc/docker/daemon.json<<EOF
+{
+ "insecure-registries" : ["0.0.0.0/0"],
+ "registry-mirrors":["https://edqvb8gd.mirror.aliyuncs.com"], 
+  "exec-opts": ["native.cgroupdriver=systemd"]
+}
+EOF
+systemctl restart docker;systemctl enable docker;sleep 5
+
+#获取docker-compose
+wget -O /root/docker-compose https://github.com/docker/compose/releases/download/1.29.2/docker-compose-Linux-x86_64
+cp /root/docker-compose /usr/local/bin/docker-compose
+chmod +x /usr/local/bin/docker-compose
+docker-compose version
+
+#部署zabbix5.0
+wget -O zabbix5.0.zip https://github.com/zabbix/zabbix-docker/archive/refs/heads/5.0.zip
+unzip zabbix5.0.zip 
+cd zabbix-docker-5.0/
+docker-compose -f docker-compose_v3_centos_mysql_latest.yaml up -d
